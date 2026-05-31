@@ -1,0 +1,23 @@
+season,round,race_name,race_date,circuit_id
+2023,1,Bahrain Grand Prix,2023-03-05,bahrain
+2023,2,Saudi Arabian Grand Prix,2023-03-19,jeddah
+2023,3,Australian Grand Prix,2023-04-02,albert_park
+2023,4,Azerbaijan Grand Prix,2023-04-30,baku
+2023,5,Miami Grand Prix,2023-05-07,miami
+2023,6,Monaco Grand Prix,2023-05-28,monaco
+2023,7,Spanish Grand Prix,2023-06-04,catalunya
+2023,8,Canadian Grand Prix,2023-06-18,villeneuve
+2023,9,Austrian Grand Prix,2023-07-02,red_bull_ring
+2023,10,British Grand Prix,2023-07-09,silverstone
+2023,11,Hungarian Grand Prix,2023-07-23,hungaroring
+2023,12,Belgian Grand Prix,2023-07-30,spa
+2023,13,Dutch Grand Prix,2023-08-27,zandvoort
+2023,14,Italian Grand Prix,2023-09-03,monza
+2023,15,Singapore Grand Prix,2023-09-17,marina_bay
+2023,16,Japanese Grand Prix,2023-09-24,suzuka
+2023,17,Qatar Grand Prix,2023-10-08,losail
+2023,18,United States Grand Prix,2023-10-22,americas
+2023,19,Mexico City Grand Prix,2023-10-29,rodriguez
+2023,20,São Paulo Grand Prix,2023-11-05,interlagos
+2023,21,Las Vegas Grand Prix,2023-11-19,vegas
+2023,22,Abu Dhabi Grand Prix,2023-11-26,yas_marina
