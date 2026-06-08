@@ -14,3 +14,6 @@ ff1cache/
 # Ignore local python runtime caching footprints
 __pycache__/
 *.pyc
+
+models/
+*.json

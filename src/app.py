@@ -65,7 +65,7 @@ if model:
     col_inputs, col_charts = st.columns([1, 2])
     
     with col_inputs:
-        st.markdown("<div class='pitwall-container'><h3>📋 STINT VARIABLES</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='pitwall-container'><h3> STINT VARIABLES</h3>", unsafe_allow_html=True)
         
         selected_driver = st.selectbox("DRIVER PROFILE:", ['VER', 'ALO', 'LEC', 'HAM', 'RUS', 'SAI', 'NOR', 'PIA', 'GAS', 'OCO'])
         
@@ -75,7 +75,7 @@ if model:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown("<div class='pitwall-container'><h3>🎯 REAL-TIME CALCULATION</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='pitwall-container'><h3> REAL-TIME CALCULATION</h3>", unsafe_allow_html=True)
         st.write("Simulating a 30-lap stint trajectory based on your variables:")
         
         # Quick metrics readout
@@ -89,7 +89,7 @@ if model:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_charts:
-        st.markdown("### 📊 SIMULATED RACE STRATEGY TIMELINE")
+        st.markdown("###  SIMULATED RACE STRATEGY TIMELINE")
         st.write("Instead of checking one lap, this projects your lap-by-lap tire degradation and changing weight over the entire next stint:")
         
         # ─── MULTI-COMPOUND STRATEGY SIMULATION ──────────────────────────────
