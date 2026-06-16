@@ -12,121 +12,113 @@ def train_season_engine(data_path):
         raise FileNotFoundError(f"Final feature matrix not found at {data_path}!")
         
     df = pd.read_csv(data_path)
-    initial_count = len(df)
     
-    # ─── 1. THE FIA 107% RULE FILTER ───────────────────────────────────────
-    print("⚡ Applying strict FIA 107% Rule to isolate pure physics racing laps...")
+    # ─── 1. TELEMETRY CLEANING (FIA 107% RULE) ─────────────────────────────
     fastest_laps = df.groupby('Circuit')['LapTimeSeconds'].min().to_dict()
     df['Circuit_Fastest'] = df['Circuit'].map(fastest_laps)
-    
-    # Any lap slower than 107% of the fastest lap is traffic, a mistake, or an in/out lap
     clean_df = df[df['LapTimeSeconds'] <= df['Circuit_Fastest'] * 1.07].copy()
-    
-    dropped = initial_count - len(clean_df)
-    print(f"✓ Purged {dropped} non-competitive/traffic anomalies. Retained {len(clean_df)} elite laps.")
+    print(f"✓ Clean Air Filter: Retained {len(clean_df)} pure racing laps.")
 
-    # ─── 2. NON-LINEAR TYRE CLIFF ENGINEERING ──────────────────────────────
-    # Transforms linear tire age into a logarithmic curve to mimic the real grip drop-off
+    # Feature engineering for non-linear tires
     clean_df['Tyre_Log_Penalty'] = np.log1p(clean_df['TyreLife'])
-
-    # ─── 3. TRACK-LOCALIZED TARGET ENCODING ────────────────────────────────
-    print("⚡ Building track-localized driver and compound baseline maps...")
-    circuit_means = clean_df.groupby('Circuit')['LapTimeSeconds'].mean().to_dict()
-    clean_df['Circuit_Pace_Baseline'] = clean_df['Circuit'].map(circuit_means)
-    
-    driver_track_means = clean_df.groupby(['Circuit', 'Driver'])['LapTimeSeconds'].mean().to_dict()
-    compound_track_means = clean_df.groupby(['Circuit', 'Compound'])['LapTimeSeconds'].mean().to_dict()
-    
-    clean_df['Driver_Track_Baseline'] = clean_df.apply(
-        lambda row: driver_track_means.get((row['Circuit'], row['Driver']), row['Circuit_Pace_Baseline']), axis=1
-    )
-    clean_df['Compound_Track_Baseline'] = clean_df.apply(
-        lambda row: compound_track_means.get((row['Circuit'], row['Compound']), row['Circuit_Pace_Baseline']), axis=1
-    )
-
-    # ─── 4. TARGET TRANSFORMATION ──────────────────────────────────────────
-    clean_df['LapTime_Delta'] = clean_df['LapTimeSeconds'] - clean_df['Driver_Track_Baseline']
     
     unique_tracks = sorted(clean_df['Circuit'].unique())
     track_to_id = {track: idx for idx, track in enumerate(unique_tracks)}
     clean_df['Circuit_ID'] = clean_df['Circuit'].map(track_to_id)
     
-    # Added the Tyre_Log_Penalty feature!
+    # ─── 2. CRITICAL FIX: TRAIN-TEST SPLIT FIRST (ANTI-LEAKAGE) ───────────
+    print("⚡ Splitting dataset before calculating target encodings...")
+    train_df, test_df = train_test_split(clean_df, test_size=0.2, random_state=42)
+
+    # ─── 3. CALCULATE COHORT AVERAGES STRICTLY ON TRAINING DATA ───────────
+    print("⚡ Compiling target encodings from training split only...")
+    circuit_means = train_df.groupby('Circuit')['LapTimeSeconds'].mean().to_dict()
+    driver_track_means = train_df.groupby(['Circuit', 'Driver'])['LapTimeSeconds'].mean().to_dict()
+    compound_track_means = train_df.groupby(['Circuit', 'Compound'])['LapTimeSeconds'].mean().to_dict()
+    
+    # ─── 4. MAP MAPPINGS BACK TO TRAIN AND TEST SEPARATELY ─────────────────
+    def apply_baselines(target_df):
+        target_df = target_df.copy()
+        target_df['Circuit_Pace_Baseline'] = target_df['Circuit'].map(circuit_means)
+        
+        target_df['Driver_Track_Baseline'] = target_df.apply(
+            lambda row: driver_track_means.get((row['Circuit'], row['Driver']), circuit_means.get(row['Circuit'], 85.0)), axis=1
+        )
+        target_df['Compound_Track_Baseline'] = target_df.apply(
+            lambda row: compound_track_means.get((row['Circuit'], row['Compound']), circuit_means.get(row['Circuit'], 85.0)), axis=1
+        )
+        # Target transformation
+        target_df['LapTime_Delta'] = target_df['LapTimeSeconds'] - target_df['Driver_Track_Baseline']
+        return target_df
+
+    train_df = apply_baselines(train_df)
+    test_df = apply_baselines(test_df)
+
+    # Define features
     features = [
-        'Circuit_ID', 
-        'LapNumber', 
-        'TyreLife', 
-        'Tyre_Log_Penalty', 
-        'FuelLoadKg', 
-        'TyreDegradationIndex', 
-        'Driver_Track_Baseline',   
-        'Compound_Track_Baseline'  
+        'Circuit_ID', 'LapNumber', 'TyreLife', 'Tyre_Log_Penalty', 
+        'FuelLoadKg', 'TyreDegradationIndex', 'Driver_Track_Baseline', 'Compound_Track_Baseline'
     ]
     
-    X_matrix = clean_df[features].copy()
-    y_vector = clean_df['LapTime_Delta'].copy()
+    X_train = train_df[features]
+    y_train = train_df['LapTime_Delta']
     
-    meta_columns = ['Circuit_Pace_Baseline', 'Driver_Track_Baseline', 'LapTimeSeconds']
-    X_meta = clean_df[meta_columns].copy()
-
-    # ─── 5. TRAIN-TEST SPLIT ───────────────────────────────────────────────
-    X_train, X_test, y_train, y_test_delta = train_test_split(
-        X_matrix, y_vector, test_size=0.2, random_state=42
-    )
-    _, X_test_meta = train_test_split(X_meta, test_size=0.2, random_state=42)
+    X_test = test_df[features]
+    y_test_delta = test_df['LapTime_Delta']
+    y_test_actual = test_df['LapTimeSeconds']
+    test_driver_baselines = test_df['Driver_Track_Baseline']
     
-    y_test_actual = X_test_meta['LapTimeSeconds']
-    test_driver_baselines = X_test_meta['Driver_Track_Baseline']
-    
-    y_train = y_train.squeeze()
-    y_test_delta = y_test_delta.squeeze()
-    
-    # ─── 6. MAE-OPTIMIZED XGBOOST ENGINE ───────────────────────────────────
-    print("⚡ Launching elite MAE-optimized multi-circuit XGBoost configuration...")
+    # ─── 5. MAE-OPTIMIZED XGBOOST ENGINE (TRAINING STEP) ───────────────────
+    print("⚡ Launching production leak-free XGBoost configuration...")
     model = xgb.XGBRegressor(
-        n_estimators=850,       # Increased to map the new logarithmic features
+        n_estimators=850,
         max_depth=8,
-        learning_rate=0.03,     # Slower descent for extreme precision
+        learning_rate=0.03,
         subsample=0.85,
         colsample_bytree=0.85,
-        objective='reg:absoluteerror',  # CRITICAL: Forces model to ignore traffic anomalies
-        eval_metric='mae',              # Optimize directly for MAE
+        objective='reg:absoluteerror',
+        eval_metric='mae',
         random_state=42,
         n_jobs=-1
     )
     
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_test, y_test_delta)],
-        verbose=False
-    )
+    # THIS IS WHAT WAS DELETED IN YOUR VERSION:
+    model.fit(X_train, y_train, eval_set=[(X_test, y_test_delta)], verbose=False)
     
-    # ─── 7. BACK-TRANSFORMATION & SCOREBOARD ───────────────────────────────
+    # ─── 6. EVALUATION & NAIVE BASELINE TEST ───────────────────────────────
     predicted_deltas = model.predict(X_test)
     final_lap_predictions = predicted_deltas + test_driver_baselines
     
+    # Calculate Model MAE
     mae = mean_absolute_error(y_test_actual, final_lap_predictions)
-    r2 = r2_score(y_test_actual, final_lap_predictions)
+    r2_total = r2_score(y_test_actual, final_lap_predictions)
     
-    print("\n🏆 ELITE PHYSICS-OPTIMIZED SCOREBOARD:")
+    # Calculate Naive MAE (What if the model just guessed the baseline?)
+    naive_mae = mean_absolute_error(y_test_actual, test_driver_baselines)
+    
+    # Calculate R2 on the Deltas (How well did we predict the physics?)
+    r2_delta = r2_score(y_test_delta, predicted_deltas)
+    
+    print("\n🏆 THE TRUE LEAK-FREE SCORING BOARD:")
     print("=============================================================")
-    print(f"⏱️ True Racing Mean Absolute Error (MAE) : {mae:.3f} seconds")
-    print(f"📈 Variance Explained (R² Score): {r2:.4f} ({r2*100:.1f}%)")
+    print(f"🧠 Naive Baseline MAE (Driver Average) : {naive_mae:.3f} seconds")
+    print(f"🤖 XGBoost Model MAE (Physics Engine)  : {mae:.3f} seconds")
+    print(f"🔥 Model's Physical Value-Add          : {naive_mae - mae:.3f} seconds")
+    print("=============================================================")
+    print(f"📈 Total R² (Including Track Length)   : {r2_total*100:.1f}%")
+    print(f"📉 Physics R² (Predicting Deltas Only) : {r2_delta*100:.1f}%")
     print("=============================================================")
     
-    # ─── 8. SERIALIZE METADATA MAPS ────────────────────────────────────────
+    # ─── 7. SERIALIZE METADATA MAPS ────────────────────────────────────────
     os.makedirs('models', exist_ok=True)
     model.save_model('models/xgb_lap_predictor.json')
     
     dt_serializable = {f"{k[0]}_{k[1]}": v for k, v in driver_track_means.items()}
     ct_serializable = {f"{k[0]}_{k[1]}": v for k, v in compound_track_means.items()}
     
-    with open('models/driver_track_means.json', 'w') as f:
-        json.dump(dt_serializable, f)
-    with open('models/compound_track_means.json', 'w') as f:
-        json.dump(ct_serializable, f)
-    with open('models/track_to_id.json', 'w') as f:
-        json.dump(track_to_id, f)
+    with open('models/driver_track_means.json', 'w') as f: json.dump(dt_serializable, f)
+    with open('models/compound_track_means.json', 'w') as f: json.dump(ct_serializable, f)
+    with open('models/track_to_id.json', 'w') as f: json.dump(track_to_id, f)
     np.save('models/circuit_means.npy', circuit_means)
         
     print("✅ Elite precision weights and localized layers securely locked.")
