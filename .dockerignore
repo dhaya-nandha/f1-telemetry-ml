@@ -1,0 +1,15 @@
+# Python/Environment
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Git
+.git/
+.gitignore
+
+# Data & Caching (CRITICAL for FastF1)
+cache/
+data/
+*.csv
+notebooks/

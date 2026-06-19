@@ -6,6 +6,8 @@ import json
 import os
 import shap
 import matplotlib.pyplot as plt
+import tempfile
+import re
 
 # ─── APP CONFIGURATION & CUSTOM CSS ───────────────────────────────────
 st.set_page_config(page_title="F1 Telemetry Predictive Engine", page_icon="🏎️", layout="wide", initial_sidebar_state="expanded")
@@ -51,14 +53,11 @@ MODELS_DIR = os.path.join(ROOT_DIR, 'models')
 
 @st.cache_resource
 def get_cached_explainer(_model_instance):
-    """
-    Cache the internal tree representation structure so dragging 
-    sliders does not reconstruct the tree map on every single frame.
-    """
+    """Caches the explainer tree so it doesn't rebuild on every slider drag."""
     return shap.TreeExplainer(_model_instance)
 
 def generate_live_shap_plot(input_data, model_instance):
-    """Calculates Shapley values dynamically using the cached explainer."""
+    """Generates the live waterfall plot cleanly."""
     explainer = get_cached_explainer(model_instance)
     shap_values = explainer(input_data)
     
@@ -66,18 +65,34 @@ def generate_live_shap_plot(input_data, model_instance):
     fig.patch.set_facecolor('#0E1117')
     ax.set_facecolor('#0E1117')
     
-    # Render the modern SHAP waterfall layout
     shap.plots.waterfall(shap_values[0], show=False)
-    
     plt.title("Live Strategy Impact: Telemetry Weight Breakdown", color='#FF1801', pad=15, fontsize=14, fontweight='bold')
     plt.tight_layout()
     return fig
 
-# ─── ARTIFACT HYDRATION ───────────────────────────────────────────────
+# ─── ARTIFACT HYDRATION & BUG FIX ─────────────────────────────────────
 @st.cache_resource
 def load_production_artifacts():
+    # ─── XGBOOST 2.1+ / SHAP BUG FIX (WINDOWS SAFE) ───────────────────
+    # 1. Read the raw JSON as pure text
+    model_path = os.path.join(MODELS_DIR, 'xgb_lap_predictor.json')
+    with open(model_path, 'r') as f:
+        raw_data = f.read()
+        
+    # 2. Use Regex to find "base_score": "[-0.00995]" and cleanly strip the brackets
+    clean_data = re.sub(r'"base_score":\s*"\[(.*?)\]"', r'"base_score": "\1"', raw_data)
+        
+    # 3. Create a temporary file, write the clean data, and explicitly CLOSE it 
+    # so Windows doesn't block XGBoost from accessing it.
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.json')
+    with os.fdopen(tmp_fd, 'w') as tmp:
+        tmp.write(clean_data)
+        
+    # 4. Load the perfectly clean model into XGBoost and delete the temp file
     model = xgb.XGBRegressor()
-    model.load_model(os.path.join(MODELS_DIR, 'xgb_lap_predictor.json'))
+    model.load_model(tmp_path)
+    os.remove(tmp_path)
+    # ──────────────────────────────────────────────────────────────────
     
     with open(os.path.join(MODELS_DIR, 'driver_track_means.json'), 'r') as f:
         driver_track_means = json.load(f)
@@ -89,14 +104,14 @@ def load_production_artifacts():
     circuit_means = np.load(os.path.join(MODELS_DIR, 'circuit_means.npy'), allow_pickle=True).item()
     return model, driver_track_means, compound_track_means, track_to_id, circuit_means
 
+# >>> CRITICAL ADDITION: ACTUALLY LOAD THE MODEL AND ARTIFACTS <<<
 try:
     model, driver_track_means, compound_track_means, track_to_id, circuit_means = load_production_artifacts()
 except Exception as e:
-    st.error(f"❌ Critical Error: Production artifacts missing. Looking in: {MODELS_DIR}")
+    st.error(f"❌ Critical Error loading models: {e}")
     st.stop()
 
 # ─── REAL-WORLD ALIGNED F1 CIRCUIT LAP MAPPING ────────────────────────
-# Fixed to match canonical event designations from data ingest pipelines
 track_max_laps = {
     'Monaco': 78, 'Belgium': 44, 'Italy': 53, 'Singapore': 62, 'Japan': 53, 
     'Great Britain': 52, 'Brazil': 71, 'Austria': 71, 'Netherlands': 72, 
@@ -107,7 +122,7 @@ track_max_laps = {
 
 available_drivers = sorted(list(set([key.split('_')[1] for key in driver_track_means.keys() if '_' in key])))
 
-# FIX: Extracted clean, literal string asset URL path
+# ─── SIDEBAR UI ───────────────────────────────────────────────────────
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg", width=100)
 st.sidebar.markdown("## Race Strategy Setup")
 
@@ -118,7 +133,6 @@ selected_driver = st.sidebar.selectbox("Select Driver", available_drivers)
 st.sidebar.markdown("### ⚙️ Car Setup & Phase")
 selected_compound = st.sidebar.selectbox("Tyre Compound", ["SOFT", "MEDIUM", "HARD"])
 
-# FIX: Accurately maps against true Circuit key strings now
 max_laps_for_track = track_max_laps.get(selected_circuit, 70)
 lap_number = st.sidebar.slider(f"Current Lap Number", 1, max_laps_for_track, min(45, max_laps_for_track))
 
