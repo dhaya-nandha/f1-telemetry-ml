@@ -178,7 +178,7 @@ def format_lap_time(seconds):
     rem_seconds = seconds % 60
     return f"{minutes:02d}:{rem_seconds:06.3f}"
 
-# ─── MAIN DASHBOARD LAYOUT ────────────────────────────────────────────
+# ─── MAIN DASHBOARD LAYOUT ──────────────────────────────────
 st.title("PIT WALL INTELLIGENCE")
 st.markdown("Real-time predictive telemetry engine. Adjust sidebar parameters to recalculate strategy.")
 
