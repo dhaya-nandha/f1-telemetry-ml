@@ -1,6 +1,6 @@
 streamlit>=1.30.0
 pandas
-numpy
-xgboost
-shap
+numpy<2.0
+xgboost==1.7.6
+shap==0.45.0
 matplotlib
