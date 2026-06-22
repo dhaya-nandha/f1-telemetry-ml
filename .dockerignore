@@ -13,3 +13,4 @@ cache/
 data/
 *.csv
 notebooks/
+*.tmp

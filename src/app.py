@@ -57,7 +57,22 @@ def get_cached_explainer(_model_instance):
     return shap.TreeExplainer(_model_instance)
 
 def generate_live_shap_plot(input_data, model_instance):
-    """Generates the live waterfall plot cleanly."""
+    """Calculates Shapley values with an in-memory string-parsing fix."""
+    
+    # ─── IN-MEMORY BRACKET STRIPPER ─────────────────────────────────────
+    try:
+        if hasattr(model_instance, 'get_booster'):
+            booster = model_instance.get_booster()
+            base_score_str = booster.attributes().get('base_score', None)
+            
+            # If the C-buffer reports brackets, strip them directly in memory
+            if base_score_str and base_score_str.startswith('['):
+                clean_score = base_score_str.strip('[] ')
+                booster.set_attr(base_score=clean_score)
+    except Exception:
+        pass
+    # ──────────────────────────────────────────────────────────────────
+
     explainer = get_cached_explainer(model_instance)
     shap_values = explainer(input_data)
     
@@ -73,26 +88,10 @@ def generate_live_shap_plot(input_data, model_instance):
 # ─── ARTIFACT HYDRATION & BUG FIX ─────────────────────────────────────
 @st.cache_resource
 def load_production_artifacts():
-    # ─── XGBOOST 2.1+ / SHAP BUG FIX (WINDOWS SAFE) ───────────────────
-    # 1. Read the raw JSON as pure text
     model_path = os.path.join(MODELS_DIR, 'xgb_lap_predictor.json')
-    with open(model_path, 'r') as f:
-        raw_data = f.read()
-        
-    # 2. Use Regex to find "base_score": "[-0.00995]" and cleanly strip the brackets
-    clean_data = re.sub(r'"base_score":\s*"\[(.*?)\]"', r'"base_score": "\1"', raw_data)
-        
-    # 3. Create a temporary file, write the clean data, and explicitly CLOSE it 
-    # so Windows doesn't block XGBoost from accessing it.
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.json')
-    with os.fdopen(tmp_fd, 'w') as tmp:
-        tmp.write(clean_data)
-        
-    # 4. Load the perfectly clean model into XGBoost and delete the temp file
+    
     model = xgb.XGBRegressor()
-    model.load_model(tmp_path)
-    os.remove(tmp_path)
-    # ──────────────────────────────────────────────────────────────────
+    model.load_model(model_path)
     
     with open(os.path.join(MODELS_DIR, 'driver_track_means.json'), 'r') as f:
         driver_track_means = json.load(f)
