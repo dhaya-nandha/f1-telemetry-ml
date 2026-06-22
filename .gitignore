@@ -15,7 +15,6 @@ ff1cache/
 __pycache__/
 *.pyc
 
-models/
 *.json
 
 .dockerignore
