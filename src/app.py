@@ -138,6 +138,36 @@ lap_number = st.sidebar.slider(f"Current Lap Number", 1, max_laps_for_track, min
 tyre_life = st.sidebar.slider("Current Tyre Age (Laps)", 1, 50, 11)
 fuel_load = st.sidebar.slider("Estimated Fuel Load (Kg)", 0, 110, 46)
 
+def audit_input_integrity(compound, tyre_life, lap_number, fuel_load, max_laps):
+    """Checks for physically impossible F1 race scenarios before model inference."""
+    errors = []
+    warnings = []
+    infos = []
+
+    # Rule A: SOFT tyres physically degrade past ~30 laps in real F1
+    if compound == "SOFT" and tyre_life > 30:
+        errors.append(
+            f"🔴 STRUCTURAL FAILURE: SOFT compound at {tyre_life} laps is physically impossible. "
+            f"SOFT tyres fail structurally beyond ~30 laps. Reduce tyre age or switch compound."
+        )
+
+    # Rule B: Late race + heavy fuel = impossible physics
+    if lap_number > (max_laps * 0.80) and fuel_load > 60:
+        warnings.append(
+            f"🟡 IMPOSSIBLE PHYSICS: Lap {lap_number} of {max_laps} with {fuel_load}kg fuel. "
+            f"Cars start with ~110kg and burn ~1.4kg/lap. Expected remaining: "
+            f"~{max(0, round(110 - (lap_number * 1.4), 1))}kg. Fuel load is unrealistically high."
+        )
+
+    # Rule C: Tyre age can't exceed lap number (unless carry-over set from previous race — rare)
+    if tyre_life > lap_number:
+        infos.append(
+            f"ℹ️ CARRY-OVER SET DETECTED: Tyre age ({tyre_life} laps) exceeds current lap "
+            f"({lap_number}). Assuming used carry-over set from a previous stint or session."
+        )
+
+    return errors, warnings, infos
+
 # ─── STATE CALCULATION & INFERENCE ────────────────────────────────────
 circuit_id = track_to_id[selected_circuit]
 dt_key = f"{selected_circuit}_{selected_driver}"
@@ -169,6 +199,12 @@ features_signature = [
 ]
 input_payload = input_payload[features_signature]
 
+# ─── GUARDRAIL AUDIT ──────────────────────────────────────────────────
+errors, warnings, infos = audit_input_integrity(
+    selected_compound, tyre_life, lap_number, fuel_load, max_laps_for_track
+)
+
+# Run prediction regardless — show results but surface alerts
 predicted_delta = model.predict(input_payload)[0]
 final_predicted_time = driver_baseline + predicted_delta
 
@@ -193,7 +229,15 @@ with col3:
 if "Fallback" in baseline_status:
     st.warning(baseline_status)
 
-st.markdown("<br>", unsafe_allow_html=True)
+# ─── RENDER GUARDRAIL ALERTS ──────────────────────────────────────────
+for error in errors:
+    st.error(error)
+for warning in warnings:
+    st.warning(warning)
+for info in infos:
+    st.info(info)
+
+st.markdown("<br>", unsafe_allow_html=True) 
 
 # Tabs for visual organization
 tab1, tab2 = st.tabs(["🏎️ LIVE SHAP PHYSICS TELEMETRY", "📊 RAW ALGORITHM PAYLOAD"])
