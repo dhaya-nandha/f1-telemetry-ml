@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: f1-wim-pitwall
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    port: 8501
+    healthCheckPath: /_stcore/health
