@@ -1,3 +1,13 @@
+---
+title: F1 WIM Pit Wall
+emoji: 🏎️
+colorFrom: red
+colorTo: gray
+sdk: docker
+app_port: 8501
+pinned: false
+---
+
 # 🏎️ F1-WIM: F1 "What-If" Machine
 ### Pit Wall Intelligence — Predictive Lap Time Engine
 
