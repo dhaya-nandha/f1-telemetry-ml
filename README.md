@@ -10,6 +10,7 @@ pinned: false
 
 # 🏎️ F1-WIM: F1 "What-If" Machine
 ### Pit Wall Intelligence — Predictive Lap Time Engine
+**🔴 Live Demo:** https://huggingface.co/spaces/NandDerek/f1-wim-pitwall
 
 An end-to-end ML pipeline that predicts Formula 1 lap times across all 22 circuits of the 2023 season. Built with XGBoost, explained with SHAP, containerized with Docker.
 
