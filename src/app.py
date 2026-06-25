@@ -75,12 +75,23 @@ def generate_live_shap_plot(input_data, model_instance):
 
     explainer = get_cached_explainer(model_instance)
     shap_values = explainer(input_data)
-    
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    fig.patch.set_facecolor('#0E1117')
-    ax.set_facecolor('#0E1117')
-    
+
+    # ─── DARK-THEME TEXT/BACKGROUND FIX FOR SHAP PLOT ───────────────────
+    plt.rcParams.update({
+        'text.color': 'white',
+        'axes.labelcolor': 'white',
+        'xtick.color': 'white',
+        'ytick.color': 'white',
+        'font.size': 11,
+    })
+
     shap.plots.waterfall(shap_values[0], show=False)
+
+    fig = plt.gcf()
+    fig.patch.set_facecolor('#0E1117')
+    for ax in fig.axes:
+        ax.set_facecolor('#0E1117')
+
     plt.title("Live Strategy Impact: Telemetry Weight Breakdown", color='#FF1801', pad=15, fontsize=14, fontweight='bold')
     plt.tight_layout()
     return fig
