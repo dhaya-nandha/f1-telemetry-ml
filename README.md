@@ -160,8 +160,6 @@ docker build -t f1-wim:latest .
 
 ## 👨‍💻 Author
 
-**Nand Derek (Dhayanandha M.)**
-
-B.Tech Computer Science (AI/ML)
+**Dhayanandha M**
 
 🔗 [LinkedIn](https://www.google.com/search?q=https://www.linkedin.com/in/dhayanandham/) | [Hugging Face](https://huggingface.co/NandDerek)
